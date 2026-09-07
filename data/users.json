@@ -1,0 +1,19 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "username": "admin",
+      "name": "Administrator",
+      "password": "$2y$10$MTEnFjSCSKBpD4jZv6l5Y.ZwPDY27ubDQPbZmUvEeri41SQbUtCOS",
+      "role": "admin"
+    },
+    {
+      "id": "2",
+      "username": "customer",
+      "name": "Demo Customer",
+      "password": "$2b$10$.WyGa4cThUaDxBPXi9Sn1uuaVRlsnIlwnrWiWHWmxSPC4a7hpsGja",
+      "role": "customer",
+      "created_at": "2026-09-07T00:00:00.000Z"
+    }
+  ]
+}
