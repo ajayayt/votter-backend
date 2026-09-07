@@ -86,28 +86,11 @@ router.post('/import', requireAuth, requireAdmin, upload.single('voters_json'), 
       return res.status(422).json({ message: 'Only JSON files are allowed.' })
     }
 
-    const assembly = String(req.body?.assembly || '').trim()
-    const assemblyNo = String(req.body?.assembly_no || '').trim()
-    const wardNo = String(req.body?.ward_no || '').trim()
-    const partNo = String(req.body?.part_no || '').trim()
-
-    if (!assembly) {
-      return res.status(422).json({ message: 'Vidhan Sabha (assembly) is required.' })
-    }
-    if (!wardNo) {
-      return res.status(422).json({ message: 'Ward number is required.' })
-    }
-    if (!partNo) {
-      return res.status(422).json({ message: 'भाग संख्या (part number) is required.' })
-    }
+    // Keep session alive during long imports
+    if (req.session) req.session.touch()
 
     const contents = req.file.buffer.toString('utf8')
-    const result = importVotersFromJsonString(contents, {
-      assembly,
-      assembly_no: assemblyNo,
-      ward_no: wardNo,
-      part_no: partNo,
-    })
+    const result = importVotersFromJsonString(contents)
 
     return res.json({
       success: true,

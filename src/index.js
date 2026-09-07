@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 4000
 const isProd = process.env.NODE_ENV === 'production'
 // Frontend URL for CORS (e.g. https://your-app.vercel.app). Reflect request origin in local/dev.
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || true
-const crossSiteCookies = Boolean(process.env.CLIENT_ORIGIN)
 
 app.set('trust proxy', 1)
 app.use(
@@ -30,12 +29,13 @@ app.use(
     secret: process.env.SESSION_SECRET || 'voter-dev-secret-change-me',
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
-      // Separate client/server hosts need SameSite=None + Secure
-      sameSite: isProd && crossSiteCookies ? 'none' : 'lax',
+      // Cross-origin frontend → API needs SameSite=None + Secure in production
+      sameSite: isProd ? 'none' : 'lax',
       secure: isProd,
-      maxAge: 1000 * 60 * 60 * 2,
+      maxAge: 1000 * 60 * 60 * 8,
     },
   }),
 )

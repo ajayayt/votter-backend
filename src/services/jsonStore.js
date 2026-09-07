@@ -381,11 +381,9 @@ function uniqueVoterKey(voter) {
 /**
  * Merge/add import: only new unique voters are appended.
  * Existing voters are never replaced.
- *
- * @param {string} jsonString
- * @param {{ assembly?: string, assembly_no?: string, ward_no?: string, part_no?: string }} [meta]
+ * Ward / part / assembly come from each voter row (or optional top-level JSON keys).
  */
-export function importVotersFromJsonString(jsonString, meta = {}) {
+export function importVotersFromJsonString(jsonString) {
   let decoded
   try {
     decoded = JSON.parse(jsonString)
@@ -398,15 +396,15 @@ export function importVotersFromJsonString(jsonString, meta = {}) {
     throw new Error('No voter records found in the JSON file.')
   }
 
+  const root = decoded && typeof decoded === 'object' && !Array.isArray(decoded) ? decoded : {}
   const defaults = {
-    assembly: String(meta.assembly || '').trim(),
-    assembly_no: String(meta.assembly_no || '').trim(),
-    ward_no: String(meta.ward_no || '').trim(),
-    part_no: String(meta.part_no || '').trim(),
-    force: true, // apply import form values onto this batch
+    assembly: String(root.assembly || root.vidhan_sabha || root.ac_name || '').trim(),
+    assembly_no: String(root.assembly_no || root.ac_no || '').trim(),
+    ward_no: String(root.ward_no || root.ward_number || '').trim(),
+    part_no: String(root.part_no || root.part_number || '').trim(),
+    force: false,
   }
 
-  // Parse "Soorsagar 129" style assembly into name + number
   if (defaults.assembly && !defaults.assembly_no) {
     const m = defaults.assembly.match(/^(.*?)[\s-]*(\d{1,4})$/)
     if (m) {
