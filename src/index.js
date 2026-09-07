@@ -1,5 +1,3 @@
-import path from 'path'
-import { fileURLToPath } from 'url'
 import express from 'express'
 import session from 'express-session'
 import cookieParser from 'cookie-parser'
@@ -9,11 +7,12 @@ import voterRoutes from './routes/voters.js'
 import profileRoutes from './routes/profile.js'
 import customerRoutes from './routes/customers.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 4000
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || true
 const isProd = process.env.NODE_ENV === 'production'
+// Frontend URL for CORS (e.g. https://your-app.vercel.app). Reflect request origin in local/dev.
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || true
+const crossSiteCookies = Boolean(process.env.CLIENT_ORIGIN)
 
 app.set('trust proxy', 1)
 app.use(
@@ -33,12 +32,17 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
+      // Separate client/server hosts need SameSite=None + Secure
+      sameSite: isProd && crossSiteCookies ? 'none' : 'lax',
       secure: isProd,
       maxAge: 1000 * 60 * 60 * 2,
     },
   }),
 )
+
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'voter-api' })
+})
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
@@ -49,14 +53,9 @@ app.use('/api', voterRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/customers', customerRoutes)
 
-if (isProd) {
-  const clientDist = path.resolve(__dirname, '../../client/dist')
-  app.use(express.static(clientDist))
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next()
-    res.sendFile(path.join(clientDist, 'index.html'))
-  })
-}
+app.use((req, res) => {
+  res.status(404).json({ message: `Not found: ${req.method} ${req.path}` })
+})
 
 app.use((err, _req, res, _next) => {
   console.error(err)
