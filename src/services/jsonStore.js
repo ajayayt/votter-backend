@@ -231,6 +231,14 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
     _phonetic: wordFolds.join(' '),
     _wordFolds: wordFolds,
     _softFolds: softFolds,
+    _nameSearch: nameKeys.searchText,
+    _nameSearchHi: namePair.nameHi || '',
+    _nameWordFolds: nameKeys.wordFolds || [],
+    _nameSoftFolds: nameKeys.softFolds || [],
+    _relSearch: relativeKeys.searchText,
+    _relSearchHi: relativePair.nameHi || '',
+    _relWordFolds: relativeKeys.wordFolds || [],
+    _relSoftFolds: relativeKeys.softFolds || [],
   }
 }
 
@@ -256,6 +264,14 @@ export function publicVoter(voter) {
   delete copy._phonetic
   delete copy._wordFolds
   delete copy._softFolds
+  delete copy._nameSearch
+  delete copy._nameSearchHi
+  delete copy._nameWordFolds
+  delete copy._nameSoftFolds
+  delete copy._relSearch
+  delete copy._relSearchHi
+  delete copy._relWordFolds
+  delete copy._relSoftFolds
   return copy
 }
 
@@ -310,31 +326,145 @@ export function findByEpic(epic) {
   return findVoter(epic)
 }
 
-export function searchVoters(query) {
+export function searchVoters(query, filters = {}) {
+  const opts = typeof query === 'object' && query != null ? query : { search: query, ...filters }
+  const nameQ = String(opts.name || '').trim()
+  const fatherQ = String(opts.father || opts.relative || '').trim()
+  const epicQ = String(opts.epic || '').trim()
+  const generalQ = String(opts.search || '').trim()
+  const wardQ = String(opts.ward || opts.ward_no || '').trim()
+  const partQ = String(opts.part || opts.part_no || opts.bhag || '').trim()
+  const exactAge = String(opts.age || '').trim()
+  const minAge = Number(opts.age_min)
+  const maxAge = Number(opts.age_max)
+
+  let list = loadVoters()
+
+  if (wardQ) {
+    list = list.filter((v) => String(v.ward_no || v.ward_number || '').trim() === wardQ)
+  }
+  if (partQ) {
+    list = list.filter((v) => String(v.part_no || v.part_number || '').trim() === partQ)
+  }
+
+  if (exactAge !== '' && Number.isFinite(Number(exactAge))) {
+    const ageN = Number(exactAge)
+    list = list.filter((v) => Number(v.age) === ageN)
+  } else {
+    if (Number.isFinite(minAge) && opts.age_min !== '' && opts.age_min != null) {
+      list = list.filter((v) => Number.isFinite(Number(v.age)) && Number(v.age) >= minAge)
+    }
+    if (Number.isFinite(maxAge) && opts.age_max !== '' && opts.age_max != null) {
+      list = list.filter((v) => Number.isFinite(Number(v.age)) && Number(v.age) <= maxAge)
+    }
+  }
+
+  if (nameQ) {
+    list = list.filter((voter) =>
+      matchesSearch(
+        nameQ,
+        voter._nameSearch || '',
+        (voter._nameWordFolds || []).join(' '),
+        voter._nameWordFolds || [],
+        voter._nameSearchHi || '',
+        voter._nameSoftFolds || [],
+      ),
+    )
+  }
+
+  if (fatherQ) {
+    list = list.filter((voter) =>
+      matchesSearch(
+        fatherQ,
+        voter._relSearch || '',
+        (voter._relWordFolds || []).join(' '),
+        voter._relWordFolds || [],
+        voter._relSearchHi || '',
+        voter._relSoftFolds || [],
+      ),
+    )
+  }
+
+  if (epicQ) {
+    const needle = epicQ.toUpperCase().replace(/\s+/g, '')
+    list = list.filter((v) =>
+      String(v.epic_no || v.voter_id || '')
+        .toUpperCase()
+        .replace(/\s+/g, '')
+        .includes(needle),
+    )
+  }
+
+  if (generalQ) {
+    list = list.filter((voter) =>
+      matchesSearch(
+        generalQ,
+        voter._search || '',
+        voter._phonetic || '',
+        voter._wordFolds || [],
+        voter._searchHi || '',
+        voter._softFolds || [],
+      ),
+    )
+  }
+
+  const rankQ = nameQ || fatherQ || epicQ || generalQ
+  if (rankQ) {
+    return rankSearchResults(list, rankQ, {
+      nameOnly: Boolean(nameQ) && !fatherQ && !epicQ && !generalQ,
+      fatherOnly: Boolean(fatherQ) && !nameQ && !epicQ && !generalQ,
+    })
+  }
+
+  return list
+}
+
+function sortNumericLabel(a, b) {
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+}
+
+export function voterFilterOptions() {
   const voters = loadVoters()
-  const needle = String(query || '').trim()
-  if (!needle) return voters
+  const wards = new Set()
+  const parts = new Set()
+  const partsByWard = {}
+  let minAge = null
+  let maxAge = null
 
-  const matched = voters.filter((voter) =>
-    matchesSearch(
-      needle,
-      voter._search || '',
-      voter._phonetic || '',
-      voter._wordFolds || [],
-      voter._searchHi || '',
-      voter._softFolds || [],
+  for (const voter of voters) {
+    const ward = String(voter.ward_no || voter.ward_number || '').trim()
+    const part = String(voter.part_no || voter.part_number || '').trim()
+    if (ward) {
+      wards.add(ward)
+      if (!partsByWard[ward]) partsByWard[ward] = new Set()
+      if (part) partsByWard[ward].add(part)
+    }
+    if (part) parts.add(part)
+    const age = Number(voter.age)
+    if (Number.isFinite(age)) {
+      minAge = minAge == null ? age : Math.min(minAge, age)
+      maxAge = maxAge == null ? age : Math.max(maxAge, age)
+    }
+  }
+
+  return {
+    wards: [...wards].sort(sortNumericLabel),
+    parts: [...parts].sort(sortNumericLabel),
+    parts_by_ward: Object.fromEntries(
+      Object.entries(partsByWard).map(([ward, set]) => [ward, [...set].sort(sortNumericLabel)]),
     ),
-  )
-
-  return rankSearchResults(matched, needle)
+    age_min: minAge,
+    age_max: maxAge,
+  }
 }
 
 /**
  * Prefer exact EPIC / name hits over relative-name-only matches.
  */
-function rankSearchResults(voters, query) {
+function rankSearchResults(voters, query, mode = {}) {
   const q = String(query || '').trim().toLowerCase()
   const qCompact = q.replace(/\s+/g, '')
+  const qRaw = String(query || '').trim()
 
   const score = (voter) => {
     let s = 0
@@ -344,20 +474,24 @@ function rankSearchResults(voters, query) {
     const relEn = String(voter.father_name_en || '').toLowerCase()
     const relHi = String(voter.father_name_hi || '')
     const nameEnCompact = nameEn.replace(/\s+/g, '')
+    const relEnCompact = relEn.replace(/\s+/g, '')
 
-    if (epic && epic === q) s += 1000
-    else if (epic && epic.includes(q)) s += 700
+    if (!mode.fatherOnly) {
+      if (epic && epic === q) s += 1000
+      else if (epic && epic.includes(q)) s += 700
 
-    if (nameHi && nameHi.includes(query.trim())) s += 900
-    if (nameEn === q || nameEnCompact === qCompact) s += 850
-    if (nameEn.startsWith(q) || nameEnCompact.startsWith(qCompact)) s += 600
-    if (nameEn.includes(q) || nameEnCompact.includes(qCompact)) s += 400
+      if (nameHi && nameHi.includes(qRaw)) s += 900
+      if (nameEn === q || nameEnCompact === qCompact) s += 850
+      if (nameEn.startsWith(q) || nameEnCompact.startsWith(qCompact)) s += 600
+      if (nameEn.includes(q) || nameEnCompact.includes(qCompact)) s += 400
+      if (nameEn) s += Math.max(0, 40 - nameEn.length)
+    }
 
-    if (relHi && relHi.includes(query.trim())) s += 200
-    if (relEn.includes(q)) s += 150
-
-    // Slight boost for shorter / closer names
-    if (nameEn) s += Math.max(0, 40 - nameEn.length)
+    if (!mode.nameOnly) {
+      if (relHi && relHi.includes(qRaw)) s += mode.fatherOnly ? 900 : 200
+      if (relEn === q || relEnCompact === qCompact) s += mode.fatherOnly ? 850 : 180
+      if (relEn.includes(q)) s += mode.fatherOnly ? 400 : 150
+    }
 
     return s
   }
@@ -407,6 +541,14 @@ function stripInternalFields(voter) {
   delete row._phonetic
   delete row._wordFolds
   delete row._softFolds
+  delete row._nameSearch
+  delete row._nameSearchHi
+  delete row._nameWordFolds
+  delete row._nameSoftFolds
+  delete row._relSearch
+  delete row._relSearchHi
+  delete row._relWordFolds
+  delete row._relSoftFolds
   return row
 }
 

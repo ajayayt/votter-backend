@@ -6,6 +6,7 @@ import {
   paginate,
   publicVoter,
   searchVoters,
+  voterFilterOptions,
   voterStats,
 } from '../services/jsonStore.js'
 import { requireAdmin, requireAuth } from '../middleware/auth.js'
@@ -34,25 +35,47 @@ router.get('/dashboard', requireAuth, (req, res) => {
   }
 })
 
+router.get('/voters/filters', requireAuth, (_req, res) => {
+  try {
+    res.json({ success: true, ...voterFilterOptions() })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message, wards: [], parts: [] })
+  }
+})
+
 router.get('/voters/search', requireAuth, (req, res) => {
   try {
-    let search = String(req.query.search || '').trim()
-    search = search.replace(/[\u0000-\u001F\u007F]/g, '')
+    const clean = (value) => String(value || '').replace(/[\u0000-\u001F\u007F]/g, '').trim()
+    const filters = {
+      search: clean(req.query.search),
+      name: clean(req.query.name),
+      father: clean(req.query.father || req.query.relative),
+      epic: clean(req.query.epic),
+      ward: clean(req.query.ward || req.query.ward_no),
+      part: clean(req.query.part || req.query.part_no || req.query.bhag),
+      age: clean(req.query.age),
+      age_min: clean(req.query.age_min),
+      age_max: clean(req.query.age_max),
+    }
 
-    const results = searchVoters(search)
+    const results = searchVoters(filters)
     const page = Number(req.query.page || 1)
     const perPage = Number(req.query.per_page || 20)
     const paginated = paginate(results, page, perPage)
     paginated.data = paginated.data.map(publicVoter)
 
+    const active = Object.entries(filters)
+      .filter(([, value]) => value)
+      .map(([key, value]) => `${key}=${value}`)
+
     let message = null
-    if (search && paginated.total === 0) {
-      message = `No voters found for "${search}".`
-    } else if (!search && paginated.total === 0) {
+    if (active.length && paginated.total === 0) {
+      message = 'No voters match these filters.'
+    } else if (!active.length && paginated.total === 0) {
       message = 'No voter records available.'
     }
 
-    res.json({ success: true, message, search, ...paginated })
+    res.json({ success: true, message, filters, ...paginated })
   } catch (error) {
     res.status(500).json({
       success: false,
