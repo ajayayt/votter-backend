@@ -108,6 +108,7 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   let wardNo = String(get(['ward_no', 'ward', 'ward_number', 'ward_sankhya'], '') || '')
   const serialNo = String(get(['serial_no', 'sl_no', 'serial', 'serial_number'], '') || '')
   let polling = String(get(['polling_station', 'polling_booth', 'booth', 'ps_name'], '') || '')
+  polling = polling.replace(/^जोधपुर\s*वाड\s*सं\.?\s*:?\s*/u, '').trim()
   const relation = String(get(['relation', 'relationship', 'relation_type'], '') || '')
   const genderRaw = String(get(['gender', 'sex'], '') || '')
   const district = String(
@@ -120,7 +121,9 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   if (partNo && defaults.pollingByPart && typeof defaults.pollingByPart === 'object') {
     const mapped = String(
       defaults.pollingByPart[partNo] || defaults.pollingByPart[String(Number(partNo))] || '',
-    ).trim()
+    )
+      .replace(/^जोधपुर\s*वाड\s*सं\.?\s*:?\s*/u, '')
+      .trim()
     if (mapped) polling = mapped
   }
 
