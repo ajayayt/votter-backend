@@ -107,7 +107,7 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   let partNo = String(get(['part_no', 'part', 'part_number', 'bhag', 'bhag_no', 'bhag_sankhya'], '') || '')
   let wardNo = String(get(['ward_no', 'ward', 'ward_number', 'ward_sankhya'], '') || '')
   const serialNo = String(get(['serial_no', 'sl_no', 'serial', 'serial_number'], '') || '')
-  const polling = String(get(['polling_station', 'polling_booth', 'booth', 'ps_name'], '') || '')
+  let polling = String(get(['polling_station', 'polling_booth', 'booth', 'ps_name'], '') || '')
   const relation = String(get(['relation', 'relationship', 'relation_type'], '') || '')
   const genderRaw = String(get(['gender', 'sex'], '') || '')
   const district = String(
@@ -116,6 +116,9 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
 
   if (!wardNo && defaults.ward_no) wardNo = String(defaults.ward_no)
   if (!partNo && defaults.part_no) partNo = String(defaults.part_no)
+  if (!polling && partNo && defaults.pollingByPart && typeof defaults.pollingByPart === 'object') {
+    polling = String(defaults.pollingByPart[partNo] || defaults.pollingByPart[String(partNo)] || '').trim()
+  }
 
   const assemblyRaw = String(
     get(
@@ -220,6 +223,7 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
     serial_no: serialNo,
     serial_number: serialNo,
     polling_station: polling,
+    polling_booth: polling,
     assembly,
     assembly_no: assemblyNo,
     voter_id: epic,
@@ -585,6 +589,7 @@ export function importVotersFromJsonString(jsonString) {
     ward_no: String(root.ward_no || root.ward_number || '').trim(),
     part_no: String(root.part_no || root.part_number || '').trim(),
     district: String(root.district || root.district_name || '').trim(),
+    pollingByPart: root.polling_stations_by_part || root.polling_booths_by_part || {},
     force: false,
   }
 
