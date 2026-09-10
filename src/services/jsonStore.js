@@ -42,15 +42,14 @@ function resolveNamePair(explicitEn, explicitHi, fallback) {
   let nameHi = String(explicitHi || '').trim()
   const raw = String(fallback || '').trim()
 
-  if (!nameEn && !nameHi && raw) {
-    if (hasDevanagari(raw) && !hasLatin(raw)) {
+  if (raw) {
+    if (hasDevanagari(raw) && !nameHi) {
       nameHi = raw
-    } else if (hasLatin(raw) && !hasDevanagari(raw)) {
+    } else if (hasLatin(raw) && !hasDevanagari(raw) && !nameEn) {
       nameEn = raw
-    } else if (hasDevanagari(raw)) {
-      nameHi = raw
-    } else {
-      nameEn = raw
+    } else if (!nameEn && !nameHi) {
+      if (hasDevanagari(raw)) nameHi = raw
+      else nameEn = raw
     }
   }
 
@@ -90,7 +89,10 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   )
 
   const relativePair = resolveNamePair(
-    get(['father_name_en', 'relative_name_en'], ''),
+    get(
+      ['father_name_en', 'relative_name_en', 'relative_name_english', 'relative_english'],
+      '',
+    ),
     get(['father_name_hi', 'relative_name_hi', 'husband_name_hi', 'mother_name_hi'], ''),
     get(
       ['relative_name', 'father_name', 'husband_name', 'mother_name', 'guardian_name', 'relation_name'],
@@ -106,8 +108,11 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   let wardNo = String(get(['ward_no', 'ward', 'ward_number', 'ward_sankhya'], '') || '')
   const serialNo = String(get(['serial_no', 'sl_no', 'serial', 'serial_number'], '') || '')
   const polling = String(get(['polling_station', 'polling_booth', 'booth', 'ps_name'], '') || '')
-  const relation = String(get(['relation', 'relationship', 'relation_type'], 'Father') || 'Father')
+  const relation = String(get(['relation', 'relationship', 'relation_type'], '') || '')
   const genderRaw = String(get(['gender', 'sex'], '') || '')
+  const district = String(
+    get(['district', 'district_name', 'zilla', 'zila'], '') || defaults.district || '',
+  ).trim()
 
   if (!wardNo && defaults.ward_no) wardNo = String(defaults.ward_no)
   if (!partNo && defaults.part_no) partNo = String(defaults.part_no)
@@ -131,26 +136,28 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
   ).trim()
 
   let assembly = assemblyRaw
+  const keepAssemblyFromImport = Boolean(defaults.assembly || defaults.assembly_no)
 
-  // Import form / defaults fill empty assembly fields
   if (!assembly && defaults.assembly) assembly = String(defaults.assembly).trim()
   if (!assemblyNo && defaults.assembly_no) assemblyNo = String(defaults.assembly_no).trim()
 
-  // Last-resort default for this project roll
-  if (!assembly && !assemblyNo) {
-    assembly = 'Soorsagar'
-    assemblyNo = '129'
-  } else if (assembly && !assemblyNo) {
+  if (assembly && !assemblyNo) {
     const m = assembly.match(/^(.*?)[\s-]*(\d{1,4})$/)
     if (m) {
       assembly = m[1].trim() || assembly
       assemblyNo = m[2]
     }
-  } else if (!assembly && assemblyNo) {
-    assembly = 'Soorsagar'
   }
 
-  // Import meta can force/override constituency fields for the batch
+  if (
+    !keepAssemblyFromImport &&
+    assembly === 'Soorsagar' &&
+    (assemblyNo === '129' || !assemblyNo)
+  ) {
+    assembly = ''
+    assemblyNo = ''
+  }
+
   if (defaults.force) {
     if (defaults.ward_no) wardNo = String(defaults.ward_no)
     if (defaults.part_no) partNo = String(defaults.part_no)
@@ -171,6 +178,7 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
     genderRaw,
     assembly,
     assemblyNo,
+    district,
   ]
     .join(' ')
     .toLowerCase()
@@ -196,15 +204,25 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
     father_name_en: relativePair.nameEn,
     father_name_hi: relativePair.nameHi,
     relation,
+    name: namePair.nameHi || namePair.nameEn,
+    name_english: namePair.nameEn,
+    relative_name: relativePair.nameHi || relativePair.nameEn,
+    relative_name_english: relativePair.nameEn,
     house_no: houseNo,
+    house_number: houseNo,
     age: get(['age'], null),
     gender: genderRaw,
+    district,
     ward_no: wardNo,
+    ward_number: wardNo,
     part_no: partNo,
+    part_number: partNo,
     serial_no: serialNo,
+    serial_number: serialNo,
     polling_station: polling,
     assembly,
     assembly_no: assemblyNo,
+    voter_id: epic,
     photo: get(['photo', 'photo_url', 'image'], null),
     dob: get(['dob', 'date_of_birth', 'birth_date'], null),
     password: get(['password'], null),
@@ -261,13 +279,35 @@ export function clearVotersCache() {
   votersMtime = null
 }
 
+function decodeLookupKey(id) {
+  let needle = String(id || '').trim()
+  if (!needle) return ''
+  try {
+    needle = decodeURIComponent(needle)
+  } catch {
+    // already decoded
+  }
+  return needle
+}
+
+function voterLookupKeys(voter) {
+  return [voter.id, voter.epic_no, voter.voter_id]
+    .map((value) => String(value || '').trim().toUpperCase())
+    .filter(Boolean)
+}
+
+export function findVoter(id) {
+  const needle = decodeLookupKey(id).toUpperCase()
+  if (!needle) return null
+  return loadVoters().find((v) => voterLookupKeys(v).includes(needle)) || null
+}
+
 export function findById(id) {
-  return loadVoters().find((v) => String(v.id) === String(id)) || null
+  return findVoter(id)
 }
 
 export function findByEpic(epic) {
-  const needle = String(epic || '').trim().toUpperCase()
-  return loadVoters().find((v) => String(v.epic_no).toUpperCase() === needle) || null
+  return findVoter(epic)
 }
 
 export function searchVoters(query) {
@@ -402,6 +442,7 @@ export function importVotersFromJsonString(jsonString) {
     assembly_no: String(root.assembly_no || root.ac_no || '').trim(),
     ward_no: String(root.ward_no || root.ward_number || '').trim(),
     part_no: String(root.part_no || root.part_number || '').trim(),
+    district: String(root.district || root.district_name || '').trim(),
     force: false,
   }
 
@@ -423,27 +464,45 @@ export function importVotersFromJsonString(jsonString) {
   }
 
   const existing = loadVoters().map(stripInternalFields)
-  const existingKeys = new Set(existing.map((v) => uniqueVoterKey(v)).filter(Boolean))
+  const indexByKey = new Map()
+  existing.forEach((v, i) => {
+    const key = uniqueVoterKey(v)
+    if (key) indexByKey.set(key, i)
+  })
 
   const toAdd = []
+  let updated = 0
   let skipped = 0
 
   for (const voter of incoming) {
     const key = uniqueVoterKey(voter)
-    if (!key || existingKeys.has(key)) {
+    const row = stripInternalFields(voter)
+    if (!key) {
       skipped += 1
       continue
     }
-    existingKeys.add(key)
-    toAdd.push(stripInternalFields(voter))
+    if (indexByKey.has(key)) {
+      const idx = indexByKey.get(key)
+      if (idx < existing.length) {
+        existing[idx] = mergeImportedVoter(existing[idx], row)
+      } else {
+        const addIdx = idx - existing.length
+        toAdd[addIdx] = mergeImportedVoter(toAdd[addIdx], row)
+      }
+      updated += 1
+      continue
+    }
+    indexByKey.set(key, existing.length + toAdd.length)
+    toAdd.push(row)
   }
 
-  if (!toAdd.length) {
+  if (!toAdd.length && !updated) {
     return {
       added: 0,
+      updated: 0,
       skipped,
       total: existing.length,
-      message: `No new voters added. ${skipped} duplicate record(s) already exist.`,
+      message: `No changes. ${skipped} record(s) could not be imported.`,
     }
   }
 
@@ -452,11 +511,27 @@ export function importVotersFromJsonString(jsonString) {
   writeJson(filePath, { voters: merged })
   clearVotersCache()
 
+  const parts = []
+  if (toAdd.length) parts.push(`Added ${toAdd.length} new voter(s)`)
+  if (updated) parts.push(`updated ${updated} existing record(s)`)
+  if (skipped) parts.push(`skipped ${skipped}`)
+
   return {
     added: toAdd.length,
+    updated,
     skipped,
     total: merged.length,
-    message: `Added ${toAdd.length} new voter(s). Skipped ${skipped} duplicate(s). Total now ${merged.length}.`,
+    message: `${parts.join(', ')}. Total now ${merged.length}.`,
+  }
+}
+
+function mergeImportedVoter(existing, incoming) {
+  return {
+    ...existing,
+    ...incoming,
+    photo: incoming.photo || existing.photo || null,
+    password: existing.password || incoming.password || null,
+    dob: incoming.dob || existing.dob || null,
   }
 }
 

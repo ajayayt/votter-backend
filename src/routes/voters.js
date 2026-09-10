@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import {
-  findById,
+  findVoter,
   importVotersFromJsonString,
   paginate,
   publicVoter,
@@ -13,7 +13,7 @@ import { requireAdmin, requireAuth } from '../middleware/auth.js'
 const router = Router()
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 80 * 1024 * 1024 },
 })
 
 router.get('/dashboard', requireAuth, (req, res) => {
@@ -63,9 +63,21 @@ router.get('/voters/search', requireAuth, (req, res) => {
   }
 })
 
+router.get('/voters/lookup', requireAuth, (req, res) => {
+  try {
+    const voter = findVoter(req.query.id || req.query.epic || '')
+    if (!voter) {
+      return res.status(404).json({ message: 'Voter not found.' })
+    }
+    return res.json({ voter: publicVoter(voter) })
+  } catch (error) {
+    return res.status(500).json({ message: error.message })
+  }
+})
+
 router.get('/voters/:id', requireAuth, (req, res) => {
   try {
-    const voter = findById(req.params.id)
+    const voter = findVoter(req.params.id)
     if (!voter) {
       return res.status(404).json({ message: 'Voter not found.' })
     }
@@ -96,6 +108,7 @@ router.post('/import', requireAuth, requireAdmin, upload.single('voters_json'), 
       success: true,
       message: result.message,
       added: result.added,
+      updated: result.updated ?? 0,
       skipped: result.skipped,
       total: result.total,
     })

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import {
-  findById,
+  findVoter,
   findUserById,
   publicVoter,
   updateUserPassword,
@@ -24,7 +24,7 @@ router.get('/', requireAuth, (req, res) => {
   }
 
   if (auth.type === 'voter' && auth.voter_id) {
-    const voter = findById(auth.voter_id)
+    const voter = findVoter(auth.voter_id)
     if (voter) {
       const safe = publicVoter(voter)
       profile.name = safe.name_en || safe.name_hi
