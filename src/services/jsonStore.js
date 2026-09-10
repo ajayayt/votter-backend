@@ -116,8 +116,12 @@ export function normalizeVoter(voter, index = 0, defaults = {}) {
 
   if (!wardNo && defaults.ward_no) wardNo = String(defaults.ward_no)
   if (!partNo && defaults.part_no) partNo = String(defaults.part_no)
-  if (!polling && partNo && defaults.pollingByPart && typeof defaults.pollingByPart === 'object') {
-    polling = String(defaults.pollingByPart[partNo] || defaults.pollingByPart[String(partNo)] || '').trim()
+  // Prefer explicit booth; otherwise fill from part → booth map
+  if (partNo && defaults.pollingByPart && typeof defaults.pollingByPart === 'object') {
+    const mapped = String(
+      defaults.pollingByPart[partNo] || defaults.pollingByPart[String(Number(partNo))] || '',
+    ).trim()
+    if (mapped) polling = mapped
   }
 
   const assemblyRaw = String(
@@ -289,7 +293,17 @@ export function loadVoters({ force = false } = {}) {
 
   const decoded = readJson(filePath)
   const list = extractVoters(decoded)
-  votersCache = list.map((v, i) => normalizeVoter(v, i))
+  const root = decoded && typeof decoded === 'object' && !Array.isArray(decoded) ? decoded : {}
+  const defaults = {
+    district: String(root.district || root.district_name || '').trim(),
+    ward_no: String(root.ward_no || root.ward_number || '').trim(),
+    part_no: String(root.part_no || root.part_number || '').trim(),
+    assembly: String(root.assembly || '').trim(),
+    assembly_no: String(root.assembly_no || '').trim(),
+    pollingByPart: root.polling_stations_by_part || root.polling_booths_by_part || {},
+  }
+
+  votersCache = list.map((v, i) => normalizeVoter(v, i, defaults))
   votersMtime = mtime
   return votersCache
 }
